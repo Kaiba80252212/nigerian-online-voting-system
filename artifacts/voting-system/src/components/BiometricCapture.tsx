@@ -37,7 +37,8 @@ async function ensureFaceApi(): Promise<void> {
       scriptLoading = new Promise<void>((resolve, reject) => {
         const existing = document.querySelector(`script[src="${FACEAPI_URL}"]`);
         if (existing) {
-          existing.addEventListener("load", () => resolve());
+          existing.addEventListener("load", () => resolve(), { once: true });
+          existing.addEventListener("error", () => reject(new Error("Failed to load face-api.js from CDN.")), { once: true });
           return;
         }
         const s = document.createElement("script");
@@ -47,6 +48,8 @@ async function ensureFaceApi(): Promise<void> {
         s.onerror = () => reject(new Error("Failed to load face-api.js from CDN. Check your internet connection."));
         document.head.appendChild(s);
       });
+      // Allow retry after a failed download instead of caching the rejection
+      scriptLoading.catch(() => { scriptLoading = null; });
     }
     await scriptLoading;
   }
@@ -105,7 +108,16 @@ export function BiometricCapture({ onCapture, label = "Capture Face" }: Biometri
 
         if (detection) {
           setStatus("detected");
-          const { x, y, width, height } = detection.detection.box;
+          // face-api reports coordinates in the camera stream's native pixel
+          // space (e.g. 640x480); the overlay canvas is fixed at 320x240, so
+          // scale the box or it will be drawn at the wrong size and position.
+          const scaleX = canvas.width / (video.videoWidth || canvas.width);
+          const scaleY = canvas.height / (video.videoHeight || canvas.height);
+          const raw = detection.detection.box;
+          const x = raw.x * scaleX;
+          const y = raw.y * scaleY;
+          const width = raw.width * scaleX;
+          const height = raw.height * scaleY;
           if (ctx) {
             // Draw green bounding box
             ctx.strokeStyle = "#22c55e";

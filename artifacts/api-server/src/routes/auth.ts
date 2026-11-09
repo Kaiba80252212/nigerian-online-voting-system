@@ -6,9 +6,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { AdminLoginBody, RegisterVoterBody, VerifyVoterBiometricBody } from "@workspace/api-zod";
 import { activityLogTable } from "@workspace/db";
+import { getJwtSecret } from "../lib/jwt";
+import { isUniqueViolation } from "../lib/dbErrors";
 
 const router = Router();
-const JWT_SECRET = process.env.SESSION_SECRET ?? "nigeria-votes-secret-2025";
 
 function euclideanDistance(a: number[], b: number[]): number {
   if (a.length !== b.length) return Infinity;
@@ -36,7 +37,7 @@ router.post("/admin/login", async (req, res) => {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
-  const token = jwt.sign({ adminId: admin.id, role: admin.role }, JWT_SECRET, { expiresIn: "8h" });
+  const token = jwt.sign({ adminId: admin.id, role: admin.role }, getJwtSecret(), { expiresIn: "8h" });
   res.json({
     token,
     admin: { id: admin.id, username: admin.username, role: admin.role },
@@ -70,17 +71,28 @@ router.post("/voter/register", async (req, res) => {
     return;
   }
 
-  const [voter] = await db.insert(votersTable).values({
-    nin,
-    fullName,
-    dateOfBirth: dateOfBirth ? dateOfBirth.toISOString().split("T")[0] : "",
-    state,
-    lga,
-    pollingUnit,
-    phoneNumber: phoneNumber ?? null,
-    status: "registered",
-    faceDescriptor: faceDescriptor as unknown as null,
-  }).returning();
+  let voter: typeof votersTable.$inferSelect;
+  try {
+    [voter] = await db.insert(votersTable).values({
+      nin,
+      fullName,
+      dateOfBirth: dateOfBirth ? dateOfBirth.toISOString().split("T")[0] : "",
+      state,
+      lga,
+      pollingUnit,
+      phoneNumber: phoneNumber ?? null,
+      status: "registered",
+      faceDescriptor,
+    }).returning();
+  } catch (err) {
+    // A concurrent registration with the same NIN can slip past the
+    // existence check above; the unique index must be the final arbiter.
+    if (isUniqueViolation(err, "nin")) {
+      res.status(400).json({ error: "A voter with this NIN is already registered" });
+      return;
+    }
+    throw err;
+  }
 
   await db.insert(activityLogTable).values({
     type: "voter_registered",
@@ -138,9 +150,14 @@ router.post("/voter/verify", async (req, res) => {
     }
   }
 
-  await db.update(votersTable).set({ status: "verified" }).where(eq(votersTable.id, voter.id));
+  // Upgrade registered → verified, but never regress a voter who has
+  // already cast a ballot back to "verified".
+  const nextStatus = voter.status === "voted" ? "voted" : "verified";
+  if (voter.status !== nextStatus) {
+    await db.update(votersTable).set({ status: nextStatus }).where(eq(votersTable.id, voter.id));
+  }
 
-  const token = jwt.sign({ voterId: voter.id, nin: voter.nin, state: voter.state }, JWT_SECRET, { expiresIn: "30m" });
+  const token = jwt.sign({ voterId: voter.id, nin: voter.nin, state: voter.state }, getJwtSecret(), { expiresIn: "30m" });
 
   res.json({
     token,
@@ -153,7 +170,7 @@ router.post("/voter/verify", async (req, res) => {
       lga: voter.lga,
       pollingUnit: voter.pollingUnit,
       phoneNumber: voter.phoneNumber,
-      status: "verified",
+      status: nextStatus,
       createdAt: voter.createdAt.toISOString(),
     },
   });

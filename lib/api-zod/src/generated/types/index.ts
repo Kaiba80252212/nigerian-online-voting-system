@@ -30,6 +30,7 @@ export * from "./electionStatus";
 export * from "./electionType";
 export * from "./electionUpdate";
 export * from "./electionUpdateStatus";
+export * from "./electionUpdateType";
 export * from "./errorResponse";
 export * from "./getAuditLogParams";
 export * from "./healthStatus";

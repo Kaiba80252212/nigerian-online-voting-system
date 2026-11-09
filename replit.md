@@ -59,9 +59,12 @@ A full-stack online voting system for Nigerian elections with biometric facial r
 ## Gotchas
 
 - face-api.js models are loaded from GitHub raw CDN — requires internet. On first biometric capture, model loading takes ~5–10 seconds.
-- The admin bcrypt hash must be generated from within `artifacts/api-server` directory where `bcryptjs` is installed.
+- Seed the default admin with `pnpm --filter @workspace/api-server run seed` (override credentials via `ADMIN_USERNAME`/`ADMIN_PASSWORD`).
 - `pnpm --filter @workspace/db run push` must be run after any schema changes before the API will work.
-- Routes are path-based: API at `/api`, voting frontend at `/`.
+- Routes are path-based: API at `/api`, voting frontend at `/`. In `vite dev`, `/api` is proxied to the API server (`API_PROXY_TARGET`, default `http://localhost:8080`).
+- `SESSION_SECRET` is mandatory — the server throws at token use without it. No default is bundled.
+- All admin endpoints (`/api/voters`, `/api/dashboard`, election/candidate mutations) require an admin JWT (`Authorization: Bearer …`); the frontend attaches it automatically from `sessionStorage` via the API client's token getter.
+- One vote per voter per election is enforced by the `votes_voter_election_unique` index — safe against concurrent double-submit races.
 
 ## Pointers
 

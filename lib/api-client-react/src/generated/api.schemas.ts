@@ -138,6 +138,17 @@ export interface ElectionInput {
   endDate: string;
 }
 
+export type ElectionUpdateType =
+  (typeof ElectionUpdateType)[keyof typeof ElectionUpdateType];
+
+export const ElectionUpdateType = {
+  presidential: "presidential",
+  gubernatorial: "gubernatorial",
+  senatorial: "senatorial",
+  house_of_reps: "house_of_reps",
+  local_government: "local_government",
+} as const;
+
 export type ElectionUpdateStatus =
   (typeof ElectionUpdateStatus)[keyof typeof ElectionUpdateStatus];
 
@@ -150,6 +161,7 @@ export const ElectionUpdateStatus = {
 export interface ElectionUpdate {
   title?: string;
   description?: string;
+  type?: ElectionUpdateType;
   startDate?: string;
   endDate?: string;
   status?: ElectionUpdateStatus;

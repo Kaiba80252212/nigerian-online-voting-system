@@ -43,7 +43,9 @@ function Router() {
         <Route path="/verify-receipt" component={VerifyReceiptPage} />
         <Route path="/certificate" component={CertificatePage} />
 
-        <Route path="/admin/audit-log" component={AdminAuditLogPage} />
+        <Route path="/admin/audit-log">
+          <RequireAdmin><AdminAuditLogPage /></RequireAdmin>
+        </Route>
 
         {/* Admin login — public */}
         <Route path="/admin/login" component={AdminLoginPage} />

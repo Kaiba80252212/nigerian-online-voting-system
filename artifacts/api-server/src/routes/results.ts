@@ -2,12 +2,13 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { electionsTable, candidatesTable, votesTable, votersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
+import { intParam } from "../lib/params";
 
 const router = Router({ mergeParams: true });
 
 router.get("/:id/results", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const id = intParam(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   const [election] = await db.select().from(electionsTable).where(eq(electionsTable.id, id)).limit(1);
   if (!election) { res.status(404).json({ error: "Election not found" }); return; }
 

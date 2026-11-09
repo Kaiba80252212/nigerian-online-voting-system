@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   useListElections, useCreateElection, useUpdateElection, useDeleteElection,
   getListElectionsQueryKey,
+  type Election,
 } from "@workspace/api-client-react";
 import { AdminSidebar } from "@/components/AdminSidebar";
 import { Button } from "@/components/ui/button";
@@ -20,13 +21,16 @@ import { cn } from "@/lib/utils";
 import { Plus, Pencil, Trash2, Users, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 
+const ELECTION_TYPE_VALUES = ["presidential", "gubernatorial", "senatorial", "house_of_reps", "local_government"] as const;
+const ELECTION_STATUS_VALUES = ["upcoming", "active", "ended"] as const;
+
 const schema = z.object({
   title: z.string().min(3, "Title required"),
   description: z.string().optional(),
-  type: z.string().min(1, "Type required"),
+  type: z.enum(ELECTION_TYPE_VALUES, { required_error: "Type required" }),
   startDate: z.string().min(1, "Start date required"),
   endDate: z.string().min(1, "End date required"),
-  status: z.string().optional(),
+  status: z.enum(ELECTION_STATUS_VALUES).optional(),
 });
 type FormData = z.infer<typeof schema>;
 
@@ -44,16 +48,16 @@ export default function AdminElections() {
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { title: "", description: "", type: "", startDate: "", endDate: "", status: "upcoming" },
+    defaultValues: { title: "", description: "", startDate: "", endDate: "", status: "upcoming" },
   });
 
   function openCreate() {
     setEditId(null);
-    form.reset({ title: "", description: "", type: "", startDate: "", endDate: "", status: "upcoming" });
+    form.reset({ title: "", description: "", startDate: "", endDate: "", status: "upcoming" });
     setModalOpen(true);
   }
 
-  function openEdit(e: { id: number; title: string; description?: string | null; type: string; startDate: string; endDate: string; status: string }) {
+  function openEdit(e: Election) {
     setEditId(e.id);
     form.reset({ title: e.title, description: e.description ?? "", type: e.type, startDate: e.startDate, endDate: e.endDate, status: e.status });
     setModalOpen(true);
