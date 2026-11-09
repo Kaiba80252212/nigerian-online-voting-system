@@ -3,6 +3,8 @@ import { db } from "@workspace/db";
 import { electionsTable, candidatesTable, votesTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { CreateElectionBody, UpdateElectionBody } from "@workspace/api-zod";
+import { requireAdmin } from "../middlewares/adminAuth";
+import { intParam } from "../lib/params";
 
 const router = Router();
 
@@ -40,7 +42,7 @@ router.get("/", async (req, res) => {
   res.json(enriched);
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireAdmin, async (req, res) => {
   const parsed = CreateElectionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid input" });
@@ -71,8 +73,8 @@ router.post("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const id = intParam(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   const [election] = await db.select().from(electionsTable).where(eq(electionsTable.id, id)).limit(1);
   if (!election) { res.status(404).json({ error: "Election not found" }); return; }
   const [{ count: candidateCount }] = await db
@@ -97,14 +99,15 @@ router.get("/:id", async (req, res) => {
   });
 });
 
-router.patch("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+router.patch("/:id", requireAdmin, async (req, res) => {
+  const id = intParam(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = UpdateElectionBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid input" }); return; }
   const updates: Record<string, unknown> = {};
   if (parsed.data.title !== undefined) updates.title = parsed.data.title;
   if (parsed.data.description !== undefined) updates.description = parsed.data.description;
+  if (parsed.data.type !== undefined) updates.type = parsed.data.type;
   if (parsed.data.startDate !== undefined) updates.startDate = parsed.data.startDate;
   if (parsed.data.endDate !== undefined) updates.endDate = parsed.data.endDate;
   if (parsed.data.status !== undefined) updates.status = parsed.data.status;
@@ -122,9 +125,9 @@ router.patch("/:id", async (req, res) => {
   });
 });
 
-router.delete("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+router.delete("/:id", requireAdmin, async (req, res) => {
+  const id = intParam(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(electionsTable).where(eq(electionsTable.id, id));
   res.status(204).send();
 });

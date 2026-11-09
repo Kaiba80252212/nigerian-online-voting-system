@@ -2,12 +2,16 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { votesTable, electionsTable, candidatesTable, votersTable, activityLogTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import jwt from "jsonwebtoken";
 import { CastVoteBody } from "@workspace/api-zod";
 import { randomBytes } from "crypto";
+import { verifyVoterToken } from "../lib/jwt";
+import { isUniqueViolation } from "../lib/dbErrors";
 
 const router = Router();
-const JWT_SECRET = process.env.SESSION_SECRET ?? "nigeria-votes-secret-2025";
+
+function generateReceiptCode(): string {
+  return "NV-" + randomBytes(6).toString("hex").toUpperCase();
+}
 
 router.post("/", async (req, res) => {
   const parsed = CastVoteBody.safeParse(req.body);
@@ -17,16 +21,13 @@ router.post("/", async (req, res) => {
   }
   const { electionId, candidateId, voterToken } = parsed.data;
 
-  let voterId: number;
-  let voterState: string | undefined;
-  try {
-    const payload = jwt.verify(voterToken, JWT_SECRET) as { voterId: number; state?: string };
-    voterId = payload.voterId;
-    voterState = payload.state;
-  } catch {
+  const payload = verifyVoterToken(voterToken);
+  if (!payload) {
     res.status(403).json({ error: "Invalid or expired voter token. Please re-verify your identity." });
     return;
   }
+  const voterId = payload.voterId;
+  const voterState = payload.state;
 
   const [election] = await db.select().from(electionsTable).where(eq(electionsTable.id, electionId)).limit(1);
   if (!election) { res.status(404).json({ error: "Election not found" }); return; }
@@ -35,7 +36,7 @@ router.post("/", async (req, res) => {
     return;
   }
 
-  const existing = await db.select().from(votesTable)
+  const existing = await db.select({ id: votesTable.id }).from(votesTable)
     .where(and(eq(votesTable.voterId, voterId), eq(votesTable.electionId, electionId)))
     .limit(1);
   if (existing.length > 0) {
@@ -48,22 +49,44 @@ router.post("/", async (req, res) => {
     .limit(1);
   if (!candidate) { res.status(404).json({ error: "Candidate not found in this election" }); return; }
 
-  const receiptCode = "NV-" + randomBytes(6).toString("hex").toUpperCase();
-  await db.insert(votesTable).values({
-    voterId,
-    electionId,
-    candidateId,
-    receiptCode,
-    state: voterState ?? null,
-  });
+  // Insert with a retry loop:
+  // - the (voterId, electionId) unique index is the final guard against
+  //   double-voting when two requests race past the check above;
+  // - a receipt-code collision (astronomically rare, but the column is unique)
+  //   simply draws a new code.
+  let receiptCode = "";
+  let inserted = false;
+  for (let attempt = 0; attempt < 5 && !inserted; attempt++) {
+    receiptCode = generateReceiptCode();
+    try {
+      await db.insert(votesTable).values({
+        voterId,
+        electionId,
+        candidateId,
+        receiptCode,
+        state: voterState ?? null,
+      });
+      inserted = true;
+    } catch (err) {
+      if (isUniqueViolation(err, "receipt_code")) continue;
+      if (isUniqueViolation(err)) {
+        res.status(400).json({ error: "You have already voted in this election" });
+        return;
+      }
+      throw err;
+    }
+  }
+  if (!inserted) {
+    res.status(500).json({ error: "Could not record your vote. Please try again." });
+    return;
+  }
 
   await db.update(votersTable).set({ status: "voted" }).where(eq(votersTable.id, voterId));
 
-  const [voter] = await db.select().from(votersTable).where(eq(votersTable.id, voterId)).limit(1);
   await db.insert(activityLogTable).values({
     type: "vote_cast",
     description: `Vote cast in "${election.title}"`,
-    state: voter?.state ?? null,
+    state: voterState ?? null,
   });
 
   res.status(201).json({

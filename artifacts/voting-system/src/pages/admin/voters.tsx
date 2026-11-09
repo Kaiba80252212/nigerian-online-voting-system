@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useListVoters, getListVotersQueryKey } from "@workspace/api-client-react";
+import { useListVoters, getListVotersQueryKey, type ListVotersStatus } from "@workspace/api-client-react";
 import { AdminSidebar } from "@/components/AdminSidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Search, ChevronLeft, ChevronRight, Users } from "lucide-react";
 export default function AdminVoters() {
   const [page, setPage] = useState(1);
   const [stateFilter, setStateFilter] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<ListVotersStatus | "">("");
 
   const { data, isLoading } = useListVoters(
     { page, limit: 20, state: stateFilter || undefined, status: statusFilter || undefined },
@@ -57,7 +57,7 @@ export default function AdminVoters() {
                 {NIGERIAN_STATES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
               </SelectContent>
             </Select>
-            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v === "_all" ? "" : v); setPage(1); }}>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v === "_all" ? "" : (v as ListVotersStatus)); setPage(1); }}>
               <SelectTrigger className="w-40" data-testid="select-status-filter">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>

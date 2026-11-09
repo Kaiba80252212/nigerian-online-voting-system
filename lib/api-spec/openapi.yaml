@@ -728,6 +728,9 @@ components:
           type: string
         description:
           type: string
+        type:
+          type: string
+          enum: [presidential, gubernatorial, senatorial, house_of_reps, local_government]
         startDate:
           type: string
         endDate:

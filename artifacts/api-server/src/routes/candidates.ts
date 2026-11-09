@@ -1,10 +1,20 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { db } from "@workspace/db";
 import { candidatesTable, votesTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { CreateCandidateBody, UpdateCandidateBody } from "@workspace/api-zod";
+import { requireAdmin } from "../middlewares/adminAuth";
+import { intParam } from "../lib/params";
 
 const router = Router({ mergeParams: true });
+
+// Params arrive via mergeParams from the "/elections/:electionId/candidates" mount.
+// Express 5 types route params from the declared path only, so annotate explicitly.
+type ElectionRouteParams = { electionId: string };
+
+function electionIdParam(req: Request): number | null {
+  return intParam((req.params as ElectionRouteParams).electionId);
+}
 
 function candidateWithVotes(c: typeof candidatesTable.$inferSelect, voteCount: number) {
   return {
@@ -22,8 +32,8 @@ function candidateWithVotes(c: typeof candidatesTable.$inferSelect, voteCount: n
 }
 
 router.get("/", async (req, res) => {
-  const electionId = parseInt(req.params.electionId);
-  if (isNaN(electionId)) { res.status(400).json({ error: "Invalid electionId" }); return; }
+  const electionId = electionIdParam(req);
+  if (electionId === null) { res.status(400).json({ error: "Invalid electionId" }); return; }
   const candidates = await db.select().from(candidatesTable).where(eq(candidatesTable.electionId, electionId));
   const enriched = await Promise.all(
     candidates.map(async (c) => {
@@ -37,9 +47,9 @@ router.get("/", async (req, res) => {
   res.json(enriched);
 });
 
-router.post("/", async (req, res) => {
-  const electionId = parseInt(req.params.electionId);
-  if (isNaN(electionId)) { res.status(400).json({ error: "Invalid electionId" }); return; }
+router.post("/", requireAdmin, async (req, res) => {
+  const electionId = electionIdParam(req);
+  if (electionId === null) { res.status(400).json({ error: "Invalid electionId" }); return; }
   const parsed = CreateCandidateBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid input" }); return; }
   const { fullName, party, partyAbbreviation, state, photoUrl, manifesto } = parsed.data;
@@ -55,9 +65,9 @@ router.post("/", async (req, res) => {
   res.status(201).json(candidateWithVotes(candidate, 0));
 });
 
-router.patch("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+router.patch("/:id", requireAdmin, async (req, res) => {
+  const id = intParam(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = UpdateCandidateBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid input" }); return; }
   const updates: Record<string, unknown> = {};
@@ -73,9 +83,9 @@ router.patch("/:id", async (req, res) => {
   res.json(candidateWithVotes(candidate, count));
 });
 
-router.delete("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+router.delete("/:id", requireAdmin, async (req, res) => {
+  const id = intParam(req.params.id);
+  if (id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(candidatesTable).where(eq(candidatesTable.id, id));
   res.status(204).send();
 });

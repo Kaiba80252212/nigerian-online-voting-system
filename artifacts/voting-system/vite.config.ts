@@ -63,6 +63,15 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
+    proxy: {
+      // The frontend talks to the API through same-site relative URLs at /api;
+      // in dev, forward those calls to the local API server. Override with
+      // API_PROXY_TARGET when the API isn't on the default Replit port.
+      "/api": {
+        target: process.env.API_PROXY_TARGET ?? "http://localhost:8080",
+        changeOrigin: true,
+      },
+    },
     fs: {
       strict: true,
     },

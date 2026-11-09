@@ -2,28 +2,25 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { votersTable, votesTable, candidatesTable, electionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import jwt from "jsonwebtoken";
+import { verifyVoterToken } from "../lib/jwt";
 
 const router = Router();
-const JWT_SECRET = process.env.SESSION_SECRET ?? "nigeria-votes-secret-2025";
 
 router.get("/", async (req, res) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+  if (!token) {
     res.status(401).json({ error: "Authentication required. Please verify your identity first." });
     return;
   }
 
-  const token = authHeader.slice(7);
-  let voterId: number;
-
-  try {
-    const payload = jwt.verify(token, JWT_SECRET) as { voterId: number };
-    voterId = payload.voterId;
-  } catch {
+  const payload = verifyVoterToken(token);
+  if (!payload) {
     res.status(403).json({ error: "Invalid or expired token. Please verify your identity again." });
     return;
   }
+  const voterId = payload.voterId;
 
   const [voter] = await db.select().from(votersTable).where(eq(votersTable.id, voterId)).limit(1);
   if (!voter) {

@@ -42,7 +42,10 @@ export const helmetMiddleware = helmet({
 
 function makeRateLimitHandler(message: string) {
   return (req: Request, res: Response) => {
-    logger.warn({ ip: req.ip, path: req.path, method: req.method }, "Rate limit exceeded");
+    const ip = req.ip ?? "unknown";
+    logger.warn({ ip, path: req.path, method: req.method }, "Rate limit exceeded");
+    // Count hits so repeat offenders escalate to a full temporary IP block.
+    recordRateLimitHit(ip);
     res.status(429).json({ error: message });
   };
 }
@@ -72,12 +75,14 @@ export const authLimiter = rateLimit({
 });
 
 // Vote casting — 20 req / hour per IP
-// A legitimate voter casts at most 1 vote per election
+// A legitimate voter casts at most 1 vote per election.
+// Only mutating requests are throttled so voters can keep checking receipts.
 export const voteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  skip: (req) => req.method === "GET" || req.method === "HEAD",
   handler: makeRateLimitHandler(
     "Unusual voting activity detected from your IP. Access is temporarily restricted."
   ),

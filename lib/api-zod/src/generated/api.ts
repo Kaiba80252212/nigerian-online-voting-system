@@ -208,6 +208,15 @@ export const UpdateElectionParams = zod.object({
 export const UpdateElectionBody = zod.object({
   title: zod.string().optional(),
   description: zod.string().optional(),
+  type: zod
+    .enum([
+      "presidential",
+      "gubernatorial",
+      "senatorial",
+      "house_of_reps",
+      "local_government",
+    ])
+    .optional(),
   startDate: zod.string().optional(),
   endDate: zod.string().optional(),
   status: zod.enum(["upcoming", "active", "ended"]).optional(),

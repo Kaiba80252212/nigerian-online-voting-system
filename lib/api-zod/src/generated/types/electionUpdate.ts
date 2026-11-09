@@ -6,10 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ElectionUpdateStatus } from "./electionUpdateStatus";
+import type { ElectionUpdateType } from "./electionUpdateType";
 
 export interface ElectionUpdate {
   title?: string;
   description?: string;
+  type?: ElectionUpdateType;
   startDate?: string;
   endDate?: string;
   status?: ElectionUpdateStatus;
